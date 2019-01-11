@@ -187,6 +187,9 @@ public:
 class DecompressorLZS : public Decompressor {
 public:
 	int unpack(Common::ReadStream *src, byte *dest, uint32 nPacked, uint32 nUnpacked);
+
+	// This is only here for dumping SSCI savegames
+	int getUnpackedLen() const { return _dwWrote; }
 protected:
 	int unpackLZS();
 	uint32 getCompLen();

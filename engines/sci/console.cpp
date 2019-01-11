@@ -54,6 +54,7 @@
 #include "sci/video/seq_decoder.h"
 #ifdef ENABLE_SCI32
 #include "common/memstream.h"
+#include "sci/decompressor.h"
 #include "sci/graphics/frameout.h"
 #include "sci/graphics/paint32.h"
 #include "sci/graphics/palette32.h"
@@ -247,6 +248,7 @@ Console::Console(SciEngine *engine) : GUI::Debugger(),
 	registerCmd("vo",					WRAP_METHOD(Console, cmdViewObject));				// alias
 	registerCmd("active_object",		WRAP_METHOD(Console, cmdViewActiveObject));
 	registerCmd("acc_object",			WRAP_METHOD(Console, cmdViewAccumulatorObject));
+	registerCmd("decomp_save",			WRAP_METHOD(Console, cmdDecompressSavegame));
 
 	_debugState.seeking = kDebugSeekNothing;
 	_debugState.seekLevel = 0;
@@ -1164,6 +1166,62 @@ bool Console::cmdHexgrep(int argc, const char **argv) {
 	return true;
 }
 
+bool Console::cmdDecompressSavegame(int argc, const char **argv) {
+// Assume an expansion factor of this much when initially assessing
+// the output size. :)
+	const int MULTIPLIER = 100;
+	
+	if (argc < 3)
+	{
+		debugPrintf("Decompresses an SSCI savegame and dumps it to disk.\n\n");
+		debugPrintf("Example: decomp_save KQ7CDSG.001 BAD_SAVE\nT");
+		debugPrintf("This command is for SCI32 only.\n");
+		return true;
+	}
+	if (getSciVersion() < SCI_VERSION_2)
+	{
+		debugPrintf("This command only works with SCI32 savegames\n");
+		return true;
+	}
+
+	Common::File f;
+	Common::DumpFile outfile;
+	if (!f.open(argv[1]))
+	{
+		debugPrintf("Can't open input file.\n");
+		return true;
+	}
+
+	DecompressorLZS decomp;
+	byte *output = new byte[MULTIPLIER * f.size()];
+
+	// Do it once to find out the output length (isn't stored in the savefile)
+	int ret = decomp.unpack(&f, output, f.size(), MULTIPLIER * f.size());
+	int output_len = decomp.getUnpackedLen();
+
+	// The first pass will always return error because of the
+	// unknown output size. Try again with the known size to
+	// determine if there really was an error.
+	assert(ret == SCI_ERROR_DECOMPRESSION_ERROR);
+	f.seek(0);
+	ret = decomp.unpack(&f, output, f.size(), output_len);
+	debugPrintf("Decompressor return code is %d\n", ret);
+	debugPrintf("Decompressed length is %d bytes\n", decomp.getUnpackedLen());
+	
+	f.close();
+	if (!outfile.open(argv[2]))
+	{
+		debugPrintf("Can't open output file for writing.\n");
+		delete[] output;
+		return true;
+	}
+	outfile.write(output, output_len);
+	outfile.close();
+	
+	delete[] output;
+	return true;
+}
+	
 bool Console::cmdVerifyScripts(int argc, const char **argv) {
 	if (getSciVersion() < SCI_VERSION_1_1) {
 		debugPrintf("This script check is only meant for SCI1.1-SCI3 games\n");

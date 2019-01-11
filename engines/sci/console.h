@@ -166,6 +166,7 @@ private:
 	bool cmdViewObject(int argc, const char **argv);
 	bool cmdViewActiveObject(int argc, const char **argv);
 	bool cmdViewAccumulatorObject(int argc, const char **argv);
+        bool cmdDecompressSavegame(int argc, const char **argv);
 
 	bool parseInteger(const char *argument, int &result);
 	bool parseResourceNumber36(const char *userParameter, uint16 &resourceNumber, uint32 &resourceTuple);
