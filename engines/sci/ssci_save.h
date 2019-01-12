@@ -36,6 +36,7 @@ public:
 private:
 	SegManager *_s;
 	DisposeAfterUse::Flag _dispose;
+	void dump20_21(Common::MemoryReadStream &data, int version);
 	uint16 peekUint16LE(Common::MemoryReadStream &data) {
 		int32 pos = data.pos();
 		uint16 ret = data.readUint16LE();

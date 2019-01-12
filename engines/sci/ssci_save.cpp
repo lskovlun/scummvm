@@ -26,51 +26,98 @@
 
 namespace Sci {
 
+static unsigned int HANDLE_TYPE_STRING;
+static unsigned int HANDLE_TYPE_OBJECT;
+static unsigned int HANDLE_TYPE_SCRIPT;
+static unsigned int HANDLE_TYPE_VARIABLES;
+static unsigned int HANDLE_TYPE_CLASSTBL;
+  
 SierraSCISaveParser::SierraSCISaveParser(SegManager *s, DisposeAfterUse::Flag dispose) :
 	_s(s),
 	_dispose(dispose)
 {
   
 }
-  
+
 void SierraSCISaveParser::dump(Common::MemoryReadStream dump)
+{
+	int version = dump.readUint32LE();
+
+	switch (version)
+	{
+	case 20 :
+		HANDLE_TYPE_STRING = 24;
+		HANDLE_TYPE_OBJECT = 25;
+		HANDLE_TYPE_SCRIPT = 37;
+		HANDLE_TYPE_VARIABLES = 36;
+		HANDLE_TYPE_CLASSTBL = 33;
+		
+		dump20_21(dump, 20);
+		break;
+	case 21 :
+		HANDLE_TYPE_STRING = 51;
+		HANDLE_TYPE_OBJECT = 52;
+		HANDLE_TYPE_SCRIPT = 64;
+		HANDLE_TYPE_VARIABLES = 63;
+		HANDLE_TYPE_CLASSTBL = 60;
+		
+		dump20_21(dump, 21);
+		break;
+	default :
+		debugN("Can't do textual dump of savegame format %d yet.\n", version);
+		break;
+	}
+}
+	
+void SierraSCISaveParser::dump20_21(Common::MemoryReadStream &dump, int version)
 {
 	Common::HashMap<uint16, Common::String> stringMap;
 	Common::HashMap<uint16, Object *> scummvmClassMap;
 	Common::HashMap<uint16, uint16> varMap;
 	byte stringBuffer[500];
 	Common::MemoryReadStream object(stringBuffer, 500);	
-	dump.skip(21);
-	
+	int header_size;
+	int multidisc_things;
+	int disc_number = -1;
+	while (dump.readByte());
+	if (version == 21)
+		disc_number = dump.readUint32LE();
+	assert(dump.readUint16LE() == 0x1000);
+	debugN("%d\n", dump.pos());	
+	dump.skip(version == 21 ? 10 : 8);
+	if (disc_number >= 0)
+	{
+		multidisc_things = dump.readUint16LE();
+		dump.skip(2 + 6 * multidisc_things);
+	}
+	header_size = dump.pos();
+	debugN("%d\n", header_size);	
+
 	// First pass: Gather strings
 	while (peekUint16LE(dump) != 0)
 	{
 		uint16 handle = dump.readUint16LE();
 		uint32 type = dump.readUint32LE();
 		uint32 size = dump.readUint32LE();
-		dump.skip(4);
+		if (version == 21)
+			dump.skip(4);
+		else
+			dump.skip(2);
+		debugN("handle %d type %08x size %08x\n", handle, type, size);
 
-		switch (type & 255)
+		if ((type & 255) == HANDLE_TYPE_STRING)
 		{
-		case 51 : // String
 			if (size <= 500)
 			{
 				dump.read(stringBuffer, size);
 				stringMap[handle] = Common::String((const char *) stringBuffer);
 			} else
 				dump.skip(size);
-			break;
-		case 60 : // Class table
+		}
+		else if ((type & 255) == HANDLE_TYPE_CLASSTBL)
 		{
 			Common::SeekableReadStream *storedClassTable = dump.readStream(size);
 			uint32 cts = storedClassTable->readUint32LE();
-			if (cts != _s->classTableSize()-1)
-			{
-				debugN("Class table size in savegame differs from the running game: %d != %d!\n",
-				       cts, _s->classTableSize());
-				delete storedClassTable;
-				return;
-			}
 
 			for (uint32 i = 0; i < cts; ++i)
 			{
@@ -79,12 +126,15 @@ void SierraSCISaveParser::dump(Common::MemoryReadStream dump)
 
 				if (class_handle != 0)
 				{
-					_s->instantiateScript(class_script);
-					Object *classRef = _s->getObject(_s->getClass(i).reg);
-					if (classRef)
+					if (g_sci->getResMan()->findResource(ResourceId(kResourceTypeScript, class_script), false) != NULL)
 					{
-						scummvmClassMap[class_handle] = classRef;
-					} else {	
+						_s->instantiateScript(class_script);
+						Object *classRef = _s->getObject(_s->getClass(i).reg);
+						if (classRef)
+						{
+							scummvmClassMap[class_handle] = classRef;
+						}
+					}  else {	
 						debugN("Unable to load class %d", i);
 					}
 				}
@@ -92,53 +142,53 @@ void SierraSCISaveParser::dump(Common::MemoryReadStream dump)
 			}
 			
 			delete storedClassTable;
-			break;
 		}
-		case 64 : // Script
+		else if ((type & 255) == HANDLE_TYPE_SCRIPT)
 		{
-			Common::SeekableReadStream *scriptEntry = dump.readStream(40);
+			Common::SeekableReadStream *scriptEntry = dump.readStream(size); 
 			scriptEntry->seek(4);
 			int scriptId = scriptEntry->readUint16LE();
 			scriptEntry->seek(12);
 			int varId = scriptEntry->readUint16LE();
 			varMap[varId] = scriptId;
 			delete scriptEntry;
-			break;
-		}
-		default :
+		} else
+		{
 			dump.skip(size);
 		}
 	}
 
-	dump.seek(21);
+	dump.seek(header_size);
 	// Second pass: Parse objects
 	while (peekUint16LE(dump) != 0)
 	{
 		uint16 handle = dump.readUint16LE();
 		uint32 type = dump.readUint32LE();
 		uint32 size = dump.readUint32LE();
-		dump.skip(4);
+		if (version == 21)
+			dump.skip(4);
+		else
+			dump.skip(2);
 
-		debugN("Memory handle %d of type %d, size %d\n", handle, type & 255, size);
-		switch (type & 255)
-		{
-		case 63 : // Variables block
+		debugN("Memory handle %d of type %d, size %d\n", handle, (type & 255), size);
+
+		if ((type & 255) == HANDLE_TYPE_VARIABLES)
 		{
 			// This may show one variable too many due to padding, but I don'r care.
 			debugN("Variables for script %d:\n\n", varMap[handle]);
 			for (uint32 i = 0; i < size/2; ++i)
 			{
 				int var = dump.readUint16LE();
-				debugN("%s_%d = %04x (%d)\n",
+				debugN("%s_%d = %d (%04x)\n",
 				       varMap[handle] == 0 ? "global" : "local",
 				       i,
 				       var,
 				       var);
 			}
 			debugN("\n");
-			break;
 		}
-		case 52 : // Object
+		else if ((type & 255) == HANDLE_TYPE_OBJECT)
+		{
 			if (size <= 500)
 			{
 				int classScript, super, info, name;
@@ -165,6 +215,7 @@ void SierraSCISaveParser::dump(Common::MemoryReadStream dump)
 				if (!theClass)
 				{
 					debugN("Failed to get class for handle %d (%04x, %04x)\n", handle, info, classScript);
+					continue;
 				}
 
 				object.seek(0);
@@ -189,12 +240,11 @@ void SierraSCISaveParser::dump(Common::MemoryReadStream dump)
 				debugN("\n");
 			} else
 				dump.skip(size);
-			break;
-		default :
+		} else
+		{
 			dump.skip(size);
 		}
 	}
-	
 }
   
 } // end of namespace Sci
