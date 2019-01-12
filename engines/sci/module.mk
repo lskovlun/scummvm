@@ -9,6 +9,7 @@ MODULE_OBJS := \
 	resource_audio.o \
 	sci.o \
 	util.o \
+	ssci_save.o \
 	engine/features.o \
 	engine/file.o \
 	engine/gc.o \

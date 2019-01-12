@@ -54,6 +54,7 @@
 #include "sci/video/seq_decoder.h"
 #ifdef ENABLE_SCI32
 #include "common/memstream.h"
+#include "sci/ssci_save.h"
 #include "sci/decompressor.h"
 #include "sci/graphics/frameout.h"
 #include "sci/graphics/paint32.h"
@@ -1218,6 +1219,9 @@ bool Console::cmdDecompressSavegame(int argc, const char **argv) {
 	outfile.write(output, output_len);
 	outfile.close();
 	
+	SierraSCISaveParser parser(_engine->_gamestate->_segMan);
+	parser.dump(Common::MemoryReadStream(output, output_len));
+
 	delete[] output;
 	return true;
 }
