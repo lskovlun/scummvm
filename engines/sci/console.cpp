@@ -1174,8 +1174,9 @@ bool Console::cmdDecompressSavegame(int argc, const char **argv) {
 	
 	if (argc < 3)
 	{
-		debugPrintf("Decompresses an SSCI savegame and dumps it to disk.\n\n");
-		debugPrintf("Example: decomp_save KQ7CDSG.001 BAD_SAVE\nT");
+		debugPrintf("Decompresses an SSCI savegame and dumps it to disk.\n");
+		debugPrintf("A textual representation is dumped to stdout (SCI2.x only).\n\n");
+		debugPrintf("Example: decomp_save KQ7CDSG.001 BAD_SAVE\n");
 		debugPrintf("This command is for SCI32 only.\n");
 		return true;
 	}
@@ -1218,10 +1219,18 @@ bool Console::cmdDecompressSavegame(int argc, const char **argv) {
 	}
 	outfile.write(output, output_len);
 	outfile.close();
-	
-	SierraSCISaveParser parser(_engine->_gamestate->_segMan);
-	parser.dump(Common::MemoryReadStream(output, output_len));
 
+	if (getSciVersion() < SCI_VERSION_3)
+	{
+		SierraSCISaveParser parser(_engine->_gamestate->_segMan);
+		parser.dump(Common::MemoryReadStream(output, output_len));
+		debugPrintf("Textual representation dumped to stdout.\n");
+	}
+	else
+	{
+		debugPrintf("Can't convert SCI3 savegames to text yet.\n");
+	}
+	
 	delete[] output;
 	return true;
 }
