@@ -1222,7 +1222,8 @@ bool Console::cmdDecompressSavegame(int argc, const char **argv) {
 
 	if (getSciVersion() < SCI_VERSION_3)
 	{
-		SierraSCISaveParser parser(_engine->_gamestate->_segMan);
+		SegManager temp(_engine->getResMan(), nullptr);
+		SierraSCISaveParser parser(&temp);
 		parser.dump(Common::MemoryReadStream(output, output_len));
 		debugPrintf("Textual representation dumped to stdout.\n");
 	}

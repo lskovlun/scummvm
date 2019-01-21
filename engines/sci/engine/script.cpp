@@ -147,7 +147,8 @@ void Script::load(int script_nr, ResourceManager *resMan, ScriptPatcher *scriptP
 	}
 
 	// Check scripts (+ possibly SCI 1.1 heap) for matching signatures and patch those, if found
-	scriptPatcher->processScript(_nr, outBuffer);
+	if (scriptPatcher)
+		scriptPatcher->processScript(_nr, outBuffer);
 
 	if (getSciVersion() <= SCI_VERSION_1_LATE) {
 		// Some buggy game scripts contain two export tables (e.g. script 912
